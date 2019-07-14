@@ -25,7 +25,7 @@ for n = 1:length(EbNoVec)
     
     while numErrsSoft < 100 && numBits < 1e7
         % Generate binary data and convert to symbols
-        dataIn = randi([0 1],numSy                         mPerFrame*k,1);
+        dataIn = randi([0 1],numSymPerFrame*k,1);
         
         % Convolutionally encode the data
         dataEnc = convenc(dataIn,trellis);

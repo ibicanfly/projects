@@ -11,6 +11,8 @@ nPackets = 100;
 %%%% Algorithm configurations
 tcConfig.convType = [0 1];
 % tcConfig.convType = [0];
+tcConfig.convType = [-1];
+genPolyOctCustom = [];
 tcConfig.modType = {'BPSK', 'BPM-BPSK'};
 % tcConfig.modType = {'BPSK'};
 tcConfig.encMode = [1 0]; % 0: Non-terminated; 1: Terminated; 2: Tail-biting; 3: Pucturated
@@ -18,7 +20,7 @@ tcConfig.decRandInitStateEn = 0; % 0: Random state; 1: Assigned state
 tcConfig.traceBackLenMode = 0; % 0: Max; 1: 5*m; 2: 3*m; 3: m
 tcConfig.quantEn = 0;
 
-%%%% Configure
+%%%% Run sims
 rng(rngSeed);
 
 
@@ -34,7 +36,9 @@ ber = zeros(nSim, nSnr);
 
 for iSim = 1:nSim
     config = configSet{iSim};
-
+    
+    %%%% Codec configurations
+    % Generator polynomial
     switch config.convType
         case 0
             genPolyOct = [7, 5];
@@ -43,6 +47,8 @@ for iSim = 1:nSim
             genPolyOct = [2, 5];
         case 2
             genPolyOct = [133, 171];
+        case -1
+            genPolyOct = genPolyOctCustom;
         otherwise
             error('Invalid convType.');
     end
@@ -61,21 +67,20 @@ for iSim = 1:nSim
         for idxOut = 1:n
             genPolyBin((idxOut-1)*k+idxIn, :) = circshift(genPolyBin((idxOut-1)*k+idxIn, :), v(idxIn)-m);
         end
-    end
+    end                                                                          
 
-    %%%% Trellis generation
-    % Reference
-    trellis = poly2trellis(v+1, genPolyOct);
-
+    % Trellis generation
     [nextStateLut, outputLut, prevStateLut, prevOutputLut, stateInBitLut, stateOutBitLut] = ...
         genConvTrellis(k, n, v, m, vTot, genPolyBin, dbgEn);
-
+    trellis = poly2trellis(v+1, genPolyOct);
     if ~isequal(trellis.nextStates, nextStateLut)
         error('Next states mismatch.');
     end
     if ~isequal(trellis.outputs, outputLut)
         error('Outputs mismatch.');
     end
+    
+    % Modulation
     switch config.modType{1}
         case 'BPSK'
             bitMapping = [1 1; 1 -1; -1 1; -1 -1];
@@ -85,7 +90,8 @@ for iSim = 1:nSim
             bitMapping = [1; -1];
     end
     nBitPerSym = size(bitMapping, 2);
-
+    
+    % Initial state
     nSmp = ceil(nBits/k);
     switch config.encMode
         case {0, 1} % No termination
@@ -98,7 +104,7 @@ for iSim = 1:nSim
             error('Invalid encoding mode.');
     end        
 
-    %%%% Run sim
+    %%%% Run codec
     nPacketErr = zeros(nSnr, 1);
     nBitErr = zeros(nSnr, 1);
     for iSnr = 1:nSnr
@@ -151,7 +157,7 @@ for iSim = 1:nSim
             idxBitMapping = bi2de(reshape(encBits, nBitPerSym, []).', 'left-msb') + 1;
             symTx = reshape(bitMapping(idxBitMapping, :).', 1, []).';
             amp = sqrt(Es(iSnr));
-            sigRx = amp*symTx + sqrt(n0)*randn(size(symTx));
+            sigRx = amp*symTx + sqrt(n0/2)*randn(size(symTx));
             if config.quantEn
                 %%%% AGC
                 % Fixed gain
@@ -225,8 +231,8 @@ titleStr = strrep(sprintf(': nBits_%d, nPackets_%d', nBits, nPackets), '_', '\_'
 figure;
 set(gcf, 'DefaultAxesColorOrder', defaultAxesColorOrder);
 set(gcf, 'defaultAxesLineStyleOrder', defaultAxesLineStyleOrder);
-set(gcf, 'defaultLineLineWidth', defaultLineLineWidth)
-set(gcf, 'defaultLineMarkerSize', defaultLineMarkerSize)
+set(gcf, 'defaultLineLineWidth', defaultLineLineWidth);
+set(gcf, 'defaultLineMarkerSize', defaultLineMarkerSize);
 for iSim = 1:nSim
     semilogy(snr_dB, per(iSim, :));
     hold on;
@@ -242,8 +248,8 @@ grid on;
 figure;
 set(gcf, 'DefaultAxesColorOrder', defaultAxesColorOrder);
 set(gcf, 'defaultAxesLineStyleOrder', defaultAxesLineStyleOrder);
-set(gcf, 'defaultLineLineWidth', defaultLineLineWidth)
-set(gcf, 'defaultLineMarkerSize', defaultLineMarkerSize)
+set(gcf, 'defaultLineLineWidth', defaultLineLineWidth);
+set(gcf, 'defaultLineMarkerSize', defaultLineMarkerSize);
 for iSim = 1:nSim
     semilogy(snr_dB, ber(iSim, :));
     hold on;
